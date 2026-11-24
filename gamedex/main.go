@@ -83,11 +83,6 @@ func main() {
 		fmt.Printf("- %s (%d) : %d tournoi(s)\n", g.Name, g.Year, count)
 	}
 
-	jeux := map[int]string{
-		1: "The Legend of Zelda (1986) - Nintendo",
-		2: "Hollow Knight (2017) - Team Cherry",
-	}
-
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
@@ -97,24 +92,33 @@ func main() {
 		fmt.Fprint(w, `<link rel="stylesheet" href="/static/css/style.css"><h1>Accueil GameDex</h1>`)
 	})
 
+	// appeller GET /api/games
 	mux.HandleFunc("GET /jeux", func(w http.ResponseWriter, r *http.Request) {
-		for id, nom := range jeux {
-			fmt.Fprintf(w, "- [%d] %s\n", id, nom)
+		jeux, err := FetchGames(*apiURL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+		for _, j := range jeux {
+			fmt.Fprintf(w, "- [%d] %s (%d - %s)\n", j.ID, j.Name, j.Year, j.Studio)
 		}
 	})
 
+	// appeller GET /api/games/{id}
 	mux.HandleFunc("GET /jeux/{id}", func(w http.ResponseWriter, r *http.Request) {
-		id, err := strconv.Atoi(r.PathValue("id"))
-		if err != nil {
+		idStr := r.PathValue("id")
+		if _, err := strconv.Atoi(idStr); err != nil {
 			http.Error(w, "ID invalide", http.StatusBadRequest) // 400
 			return
 		}
-		jeu, ok := jeux[id]
-		if !ok {
-			http.Error(w, "Jeu introuvable", http.StatusNotFound) // 404
+		var jeu Game
+		err := fetchJSON(*apiURL+"/api/games/"+idStr, &jeu)
+		// Si 404
+		if err != nil {
+			http.Error(w, "Jeu introuvable ou erreur API", http.StatusNotFound) // 404
 			return
 		}
-		fmt.Fprintf(w, "Jeu #%d : %s\n", id, jeu)
+		fmt.Fprintf(w, "Jeu #%d : %s (%d) par %s\n", jeu.ID, jeu.Name, jeu.Year, jeu.Studio)
 	})
 
 	fmt.Println("Serveur sur http://localhost:" + *port)
