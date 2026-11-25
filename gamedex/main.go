@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -25,12 +26,21 @@ type Tournament struct {
 	GameID int    `json:"gameId"`
 	City   string `json:"city"`
 	Date   string `json:"date"`
+}
 
+type JeuxPage struct {
+	Games []Game
+	Query string
 }
 
 type JeuPage struct {
 	Game       Game
 	Tournament []Tournament
+}
+
+type ErrorPage struct {
+	Code    int
+	Message string
 }
 
 var httpClient = &http.Client{
@@ -95,25 +105,53 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
+	// Templates
+	tmpl := template.Must(template.ParseGlob("templates/*.html"))
+
+	// Gestion des erreurs HTTP
+	renderError := func(w http.ResponseWriter, code int, message string) {
+		w.WriteHeader(code)
+		if err := tmpl.ExecuteTemplate(w, "erreur.html", ErrorPage{
+			Code:    code,
+			Message: message,
+		}); err != nil {
+			http.Error(w, message, code)
+		}
+	}
+
 	// Accueil
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		fmt.Fprint(w, `<link rel="stylesheet" href="/static/css/style.css"><h1>Accueil GameDex</h1>`)
+		fmt.Fprint(w, `<link rel="stylesheet" href="/static/css/style.css"><h1>Accueil GameDex</h1><a href="/jeux">Voir les jeux</a>`)
 	})
-
-	// Templates
-	tmplJeux := template.Must(template.ParseFiles("static/jeux.html"))
-	tmplTournaments := template.Must(template.ParseFiles("static/tournois.html"))
 
 	// Appeler GET /api/games
 	mux.HandleFunc("GET /jeux", func(w http.ResponseWriter, r *http.Request) {
 		jeux, err := FetchGames(*apiURL)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			renderError(w, http.StatusBadGateway, "API indisponible : "+err.Error())
 			return
 		}
 
-		if err := tmplJeux.ExecuteTemplate(w, "jeux", jeux); err != nil {
+		query := strings.TrimSpace(r.URL.Query().Get("q"))
+		var filtered []Game
+		if query != "" {
+			qLower := strings.ToLower(query)
+			for _, g := range jeux {
+				if strings.Contains(strings.ToLower(g.Name), qLower) {
+					filtered = append(filtered, g)
+				}
+			}
+		} else {
+			filtered = jeux
+		}
+
+		data := JeuxPage{
+			Games: filtered,
+			Query: query,
+		}
+
+		if err := tmpl.ExecuteTemplate(w, "jeux.html", data); err != nil {
 			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
 		}
 	})
@@ -121,27 +159,37 @@ func main() {
 	// Appeler GET /api/games/{id}
 	mux.HandleFunc("GET /jeux/{id}", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
-		if _, err := strconv.Atoi(idStr); err != nil {
-			http.Error(w, "ID invalide", http.StatusBadRequest)
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			renderError(w, http.StatusBadRequest, "ID invalide")
 			return
 		}
+
 		var jeu Game
-		err := fetchJSON(*apiURL+"/api/games/"+idStr, &jeu)
-		if err != nil {
-			http.Error(w, "Jeu introuvable ou erreur API", http.StatusNotFound)
-			return
-		}
-		jeux, err := FetchGames(*apiURL)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+		if err := fetchJSON(*apiURL+"/api/games/"+idStr, &jeu); err != nil {
+			renderError(w, http.StatusNotFound, "Jeu introuvable ou erreur API")
 			return
 		}
 
-		if err := tmplJeux.ExecuteTemplate(w, "jeux", jeux); err != nil {
-			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
+		allTournaments, err := FetchTournaments(*apiURL)
+		if err != nil {
+			renderError(w, http.StatusBadGateway, "API indisponible pour les tournois")
+			return
+		}
 
-		tournaments, err := FetchTournaments(*apiURL)
-		if err := tmplTournaments.ExecuteTemplate(w, "tournaments", tournaments); err != nil {
+		var gameTournaments []Tournament
+		for _, t := range allTournaments {
+			if t.GameID == id {
+				gameTournaments = append(gameTournaments, t)
+			}
+		}
+
+		data := JeuPage{
+			Game:       jeu,
+			Tournament: gameTournaments,
+		}
+
+		if err := tmpl.ExecuteTemplate(w, "jeu.html", data); err != nil {
 			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
 		}
 	})
