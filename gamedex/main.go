@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"net/http"
 	"os"
 	"strconv"
@@ -22,6 +23,14 @@ type Tournament struct {
 	ID     int    `json:"id"`
 	Name   string `json:"name"`
 	GameID int    `json:"gameId"`
+	City   string `json:"city"`
+	Date   string `json:"date"`
+
+}
+
+type JeuPage struct {
+	Game       Game
+	Tournament []Tournament
 }
 
 var httpClient = &http.Client{
@@ -61,7 +70,7 @@ func main() {
 	apiURL := flag.String("api", "http://localhost:8000", "URL de base API")
 	flag.Parse()
 
-	// affichage dans le terminal
+	// Affichage dans le terminal
 	games, err := FetchGames(*apiURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Erreur :", err)
@@ -86,39 +95,55 @@ func main() {
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
-	// accueil
+	// Accueil
 	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, `<link rel="stylesheet" href="/static/css/style.css"><h1>Accueil GameDex</h1>`)
 	})
 
-	// appeller GET /api/games
+	// Templates
+	tmplJeux := template.Must(template.ParseFiles("static/jeux.html"))
+	tmplTournaments := template.Must(template.ParseFiles("static/tournois.html"))
+
+	// Appeler GET /api/games
 	mux.HandleFunc("GET /jeux", func(w http.ResponseWriter, r *http.Request) {
 		jeux, err := FetchGames(*apiURL)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		for _, j := range jeux {
-			fmt.Fprintf(w, "- [%d] %s (%d - %s)\n", j.ID, j.Name, j.Year, j.Studio)
+
+		if err := tmplJeux.ExecuteTemplate(w, "jeux", jeux); err != nil {
+			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
 		}
 	})
 
-	// appeller GET /api/games/{id}
+	// Appeler GET /api/games/{id}
 	mux.HandleFunc("GET /jeux/{id}", func(w http.ResponseWriter, r *http.Request) {
 		idStr := r.PathValue("id")
 		if _, err := strconv.Atoi(idStr); err != nil {
-			http.Error(w, "ID invalide", http.StatusBadRequest) // 400
+			http.Error(w, "ID invalide", http.StatusBadRequest)
 			return
 		}
 		var jeu Game
 		err := fetchJSON(*apiURL+"/api/games/"+idStr, &jeu)
-		// Si 404
 		if err != nil {
-			http.Error(w, "Jeu introuvable ou erreur API", http.StatusNotFound) // 404
+			http.Error(w, "Jeu introuvable ou erreur API", http.StatusNotFound)
 			return
 		}
-		fmt.Fprintf(w, "Jeu #%d : %s (%d) par %s\n", jeu.ID, jeu.Name, jeu.Year, jeu.Studio)
+		jeux, err := FetchGames(*apiURL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+			return
+		}
+
+		if err := tmplJeux.ExecuteTemplate(w, "jeux", jeux); err != nil {
+			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
+
+		tournaments, err := FetchTournaments(*apiURL)
+		if err := tmplTournaments.ExecuteTemplate(w, "tournaments", tournaments); err != nil {
+			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
+		}
 	})
 
 	fmt.Println("Serveur sur http://localhost:" + *port)

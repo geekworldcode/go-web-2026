@@ -1,0 +1,20 @@
+{{define "tournaments"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <h1>Voici la liste des tournois !</h1>
+    {{range .}}
+    <div>
+      <h2><u>{{.Name}}</u> à <u>{{.City}}</u> le <u>{{.Date}}</u></h2>
+    </div>
+  {{else}}
+    <p>Aucun jeu trouvé.</p>
+  {{end}}
+</body>
+</html>
+{{end}}

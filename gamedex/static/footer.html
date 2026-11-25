@@ -1,0 +1,24 @@
+{{/* static/header.html */}}
+{{define "header"}}
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <title>Gamedex</title>
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- On boucle sur la slice []Game envoyée par /jeux -->
+  {{range .}}
+    <div>
+      <h1>{{.Name}}</h1>
+      <p>Année : {{.Year}}</p>
+      <p>Studio : {{.Studio}}</p>
+    </div>
+    <hr>
+  {{else}}
+    <p>Aucun jeu trouvé.</p>
+  {{end}}
+</body>
+</html>
+{{end}}
