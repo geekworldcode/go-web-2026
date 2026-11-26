@@ -4,6 +4,13 @@
 
 <form method="GET" action="/jeux">
   <input type="text" name="q" value="{{.Query}}" placeholder="Rechercher...">
+  <label for="genre">Genre</label>
+  <select name="genre" id="genre">
+    <option value="">Tous les genres</option>
+    {{range .Genres}}
+      <option value="{{.}}"{{if eq . $.Genre}} selected{{end}}>{{.}}</option>
+    {{end}}
+  </select>
   <button type="submit">Chercher</button>
 </form>
 
@@ -19,4 +26,4 @@
   {{end}}
 </ul>
 
-{{template "footer" .}}   
+{{template "footer" .}}

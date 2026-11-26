@@ -1,24 +1,24 @@
 package catalog
 
 import (
-	"strings"
+	"sort"
 
 	"go-web-2026/internal/api"
 )
 
-func FilterGames(games []api.Game, query string) []api.Game {
-	if query == "" {
-		return games
-	}
-
-	qLower := strings.ToLower(query)
-	var filtered []api.Game
-	for _, g := range games {
-		if strings.Contains(strings.ToLower(g.Name), qLower) {
-			filtered = append(filtered, g)
+func Genres(games []api.Game) []string {
+	seen := make(map[string]bool)
+	var genres []string
+	for _, game := range games {
+		for _, genre := range game.Genres {
+			if !seen[genre] {
+				seen[genre] = true
+				genres = append(genres, genre)
+			}
 		}
 	}
-	return filtered
+	sort.Strings(genres)
+	return genres
 }
 
 func TournamentsForGame(tournaments []api.Tournament, gameID int) []api.Tournament {

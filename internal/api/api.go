@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"time"
 )
@@ -44,9 +45,13 @@ func FetchJSON(url string, target any) error {
 	return nil
 }
 
-func FetchGames(apiURL string) ([]Game, error) {
+func FetchGames(apiURL, query, genre string) ([]Game, error) {
+	params := url.Values{}
+	params.Set("q", query)
+	params.Set("genre", genre)
+
 	var games []Game
-	err := FetchJSON(apiURL+"/api/games", &games)
+	err := FetchJSON(apiURL+"/api/games?"+params.Encode(), &games)
 	return games, err
 }
 

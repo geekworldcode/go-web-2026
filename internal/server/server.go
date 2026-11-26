@@ -10,17 +10,21 @@ import (
 
 	"go-web-2026/internal/api"
 	"go-web-2026/internal/catalog"
+	"go-web-2026/internal/store"
 	"go-web-2026/web"
 )
 
 type JeuxPage struct {
-	Games []api.Game
-	Query string
+	Games  []api.Game
+	Query  string
+	Genre  string
+	Genres []string
 }
 
 type JeuPage struct {
 	Game       api.Game
 	Tournament []api.Tournament
+	Likes      int
 }
 
 type ErrorPage struct {
@@ -49,6 +53,7 @@ func RunServer() {
 	srv.Home()
 	srv.Games()
 	srv.GameByID()
+	srv.LikeGame()
 
 	fmt.Println("Serveur sur http://localhost:" + *port)
 	if err := http.ListenAndServe(":"+*port, srv.mux); err != nil {
@@ -75,18 +80,28 @@ func (s *Server) Home() {
 
 func (s *Server) Games() {
 	s.mux.HandleFunc("GET /jeux", func(w http.ResponseWriter, r *http.Request) {
-		jeux, err := api.FetchGames(s.apiURL)
+		params := r.URL.Query()
+		query := strings.TrimSpace(params.Get("q"))
+		genre := strings.TrimSpace(params.Get("genre"))
+
+		jeux, err := api.FetchGames(s.apiURL, "", "")
 		if err != nil {
 			s.renderError(w, http.StatusBadGateway, "API indisponible : "+err.Error())
 			return
 		}
 
-		query := strings.TrimSpace(r.URL.Query().Get("q"))
-		filtered := catalog.FilterGames(jeux, query)
-
 		data := JeuxPage{
-			Games: filtered,
-			Query: query,
+			Games:  jeux,
+			Query:  query,
+			Genre:  genre,
+			Genres: catalog.Genres(jeux),
+		}
+		if query != "" || genre != "" {
+			data.Games, err = api.FetchGames(s.apiURL, query, genre)
+			if err != nil {
+				s.renderError(w, http.StatusBadGateway, "API indisponible : "+err.Error())
+				return
+			}
 		}
 
 		if err := s.tmpl.ExecuteTemplate(w, "jeux.html", data); err != nil {
@@ -118,10 +133,28 @@ func (s *Server) GameByID() {
 		data := JeuPage{
 			Game:       jeu,
 			Tournament: catalog.TournamentsForGame(allTournaments, id),
+			Likes:      store.Likes(id),
 		}
 
 		if err := s.tmpl.ExecuteTemplate(w, "jeu.html", data); err != nil {
 			http.Error(w, "Erreur de rendu template : "+err.Error(), http.StatusInternalServerError)
 		}
+	})
+}
+
+func (s *Server) LikeGame() {
+	s.mux.HandleFunc("POST /jeux/{id}/like", func(w http.ResponseWriter, r *http.Request) {
+		id, err := strconv.Atoi(r.PathValue("id"))
+		if err != nil {
+			s.renderError(w, http.StatusBadRequest, "ID invalide")
+			return
+		}
+		if _, err := api.FetchGameByID(s.apiURL, id); err != nil {
+			s.renderError(w, http.StatusNotFound, "Jeu introuvable ou erreur API")
+			return
+		}
+
+		store.AddLike(id)
+		http.Redirect(w, r, "/jeux/"+strconv.Itoa(id), http.StatusSeeOther)
 	})
 }

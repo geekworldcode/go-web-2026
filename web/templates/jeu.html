@@ -2,6 +2,10 @@
 
 <h1>{{.Game.Name}} ({{.Game.Year}})</h1>
 <p>Studio : {{.Game.Studio}}</p>
+<form method="POST" action="/jeux/{{.Game.ID}}/like">
+  <button type="submit">J'aime</button>
+  <span>{{.Likes}} likes</span>
+</form>
 
 <h2>Tournois associés</h2>
 <ul>
