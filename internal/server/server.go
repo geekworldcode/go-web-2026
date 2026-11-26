@@ -4,8 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"html/template"
-	"io/fs"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -37,7 +35,7 @@ type Server struct {
 }
 
 func RunServer() {
-	port := flag.String("port", "8080", "port du serveur")
+	port := flag.String("port", "3000", "port du serveur")
 	apiURL := flag.String("api", "http://localhost:8081", "URL de base API")
 	flag.Parse()
 
@@ -47,18 +45,14 @@ func RunServer() {
 		tmpl:   template.Must(template.ParseFS(web.Assets, "templates/*.html")),
 	}
 
-	static, err := fs.Sub(web.Assets, "static")
-	if err != nil {
-		log.Fatal(err)
-	}
-	srv.mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServerFS(static)))
+	srv.mux.Handle("GET /static/", http.FileServerFS(web.Assets))
 	srv.Home()
 	srv.Games()
 	srv.GameByID()
 
 	fmt.Println("Serveur sur http://localhost:" + *port)
 	if err := http.ListenAndServe(":"+*port, srv.mux); err != nil {
-		log.Fatal("Erreur serveur : ", err)
+		fmt.Println("Erreur serveur :", err)
 	}
 }
 
